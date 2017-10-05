@@ -15,15 +15,13 @@ describe CensusInvitationJob do
     it 'contains all leaders in the system' do
       double_role = Fabricate(:person)
       all = [people(:flock_leader_bern), people(:flock_leader)]
-      all << Fabricate(Group::StateAgency::Leader.name.to_sym, group: groups(:be_agency)).person
+      all << Fabricate(Group::StateAgency::Leader.name.to_sym, group: groups(:be_agency), person: double_role).person
       all << Fabricate(Group::Flock::Leader.name.to_sym, group: groups(:bern)).person
       all << Fabricate(Group::Flock::Leader.name.to_sym, group: groups(:bern)).person
-      all << Fabricate(Group::ChildGroup::Leader.name.to_sym, group: groups(:asterix)).person
-      all << Fabricate(Group::ChildGroup::Leader.name.to_sym, group: groups(:asterix), person: double_role).person
       # double
-      Fabricate(Group::ChildGroup::Leader.name.to_sym, group: groups(:obelix), person: double_role)
+      Fabricate(Group::Flock::Leader.name.to_sym, group: groups(:bern), person: double_role)
       # empty email
-      all << Fabricate(Group::ChildGroup::Leader.name.to_sym, group: groups(:obelix), person: Fabricate(:person, email: '')).person
+      all << Fabricate(Group::Flock::Leader.name.to_sym, group: groups(:bern), person: Fabricate(:person, email: '')).person
       # different role
       Fabricate(Group::Flock::Guide.name.to_sym, group: groups(:bern))
 

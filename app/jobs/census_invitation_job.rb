@@ -8,8 +8,7 @@
 class CensusInvitationJob < BaseJob
 
   RECIPIENT_ROLES = [Group::StateAgency::Leader,
-                     Group::Flock::Leader,
-                     Group::ChildGroup::Leader]
+                     Group::Flock::Leader]
 
 
   self.parameters = [:census_id]
