@@ -44,20 +44,6 @@ describe Role do
     end
   end
 
-  describe Group::Region::Alumnus do
-    subject { Group::Region::Alumnus }
-
-    it { is_expected.to be_alumnus }
-    it { is_expected.not_to be_member }
-    it { is_expected.to be_visible_from_above }
-
-    its(:permissions) { should ==  [:group_read] }
-
-    it 'may be created for region' do
-      role = Fabricate.build(subject.name.to_sym, group: groups(:city))
-      expect(role).to be_valid
-    end
-  end
 
   describe '#all_types' do
     subject { Role.all_types }
@@ -71,54 +57,101 @@ describe Role do
     end
   end
 
-  context '#destroy' do
-    let(:role) { Fabricate(role_class.name.to_s, group: groups(:bern), created_at: created_at) }
-    let(:role_class) { Group::Flock::Leader }
-    let(:created_at) { Time.zone.now }
+  context '#create' do
+    let(:group) { groups(:ch) }
 
-    context 'young role' do
-      it 'deletes from database' do
-        expect { role.destroy }.not_to change { Group::Flock::Alumnus.count }
-        expect(Role.with_deleted.where(id: role.id)).not_to be_exists
-      end
-    end
-
-    context 'old roles' do
-      let(:created_at) { Time.zone.now - Settings.role.minimum_days_to_archive.days - 1.day }
-
-      context 'single role' do
-        it 'flags as deleted, creates alumnus role' do
-          expect { role.destroy }.to change { Group::Flock::Alumnus.count }.by(1)
-          expect(Role.only_deleted.find(role.id)).to be_present
-        end
-      end
-
-      context 'multiple roles' do
-        before { Fabricate(role_class.name.to_s, group: groups(:bern), person: role.person, created_at: created_at) }
-
-        it 'flags as deleted, does not create alumnus role' do
-          expect { role.destroy }.not_to change { Group::Flock::Alumnus.count }
-          expect(Role.only_deleted.find(role.id)).to be_present
-        end
-      end
-
-      context 'external role' do
-        let(:role_class) { Group::Flock::External }
-
-        it 'flags as deleted, does not create alumnus role' do
-          expect { role.destroy }.not_to change { Group::Flock::Alumnus.count }
-          expect(Role.only_deleted.find(role.id)).to be_present
-        end
-      end
-
-      context 'alumnus role' do
-        let(:role_class) { Group::Flock::Alumnus }
-        before { role } # ensure we have created the original Alumnus role before expecting
-
-        it 'can be destroyed, creates new alumnus role' do
-          expect { role.destroy }.not_to change { Group::Flock::Alumnus.count }
-        end
-      end
+    it 'cannot create role without type' do
+      person = Fabricate(Group::Flock::Leader.to_s, group: groups(:bern)).person
+      role = person.roles.build(type: '', group: group)
+      expect(role).not_to be_valid
     end
   end
+
+  context 'alumnus' do
+    let(:group) { groups(:ch) }
+    let(:alumni_group) { groups(:ch_ehemalige) }
+
+    def self.samples
+      [ %w(Group::FederalBoard::Member          federal_board -1),
+        %w(Group::FederalBoard::President       federal_board -1),
+        %w(Group::FederalBoard::GroupAdmin      federal_board -1),
+        %w(Group::FederalBoard::External        federal_board  0),
+        %w(Group::FederalBoard::DispatchAddress federal_board  0),
+      ]
+    end
+
+    context 'create' do
+      (samples + [%w(Group::FederalAlumnusGroup::Leader ch_ehemalige -1)]).each do |role_type, group, change|
+        it "#{role_type} changes alumni members by #{change}" do
+          role = Fabricate(Group::FederalAlumnusGroup::Member.to_s, group: alumni_group)
+          expect do
+            Fabricate(role_type, person: role.person, group: groups(group))
+          end.to change { Group::FederalAlumnusGroup::Member.where(group: alumni_group).count }.by(change.to_i)
+        end
+      end
+    end
+
+    context 'destroy' do
+      samples.each do |role_type, group, change|
+        it "#{role_type} changes alumni members by #{change.to_i * -1}" do
+          role = Fabricate(role_type, group: groups(group))
+          role.update(created_at: Time.zone.now - Settings.role.minimum_days_to_archive.days - 1.day)
+          expect do
+            role.destroy
+          end.to change { Group::FederalAlumnusGroup::Member.where(group: alumni_group).count }.by(change.to_i * -1)
+        end
+      end
+    end
+
+    context 'validations'do
+      it 'does not allow creating alumnus member if active role in same layer exists' do
+        person = Fabricate(Group::FederalBoard::Member.to_s, group: groups(:federal_board)).person
+        role = person.roles.build(type: Group::FederalAlumnusGroup::Member.to_s, group: alumni_group)
+        expect(role).not_to be_valid
+        expect(role.errors.full_messages.first).to eq 'Es befinden sich noch andere aktive Rollen in diesem Layer'
+      end
+
+      it 'does allow creating alumnus member if only role in same layer is in another alumnus group' do
+        group = Group::FederalAlumnusGroup.create!(name: 'other', parent: groups(:ch))
+        person = Fabricate(Group::FederalAlumnusGroup::Member.to_s, group: group).person
+        role = person.roles.build(type: Group::FederalAlumnusGroup::Member.to_s, group: alumni_group)
+        expect(role).to be_valid
+      end
+
+      it 'allows creating alumnus member if active exists in other layer' do
+        person = Fabricate(Group::Flock::Leader.to_s, group: groups(:bern)).person
+        role = person.roles.build(type: Group::FederalAlumnusGroup::Member.to_s, group: alumni_group)
+        expect(role).to be_valid
+      end
+
+      it 'allows creating alumnus leader if active role exists in same layer' do
+        person = Fabricate(Group::FederalBoard::Member.to_s, group: groups(:federal_board)).person
+        role = person.roles.build(type: Group::FederalAlumnusGroup::Leader.to_s, group: alumni_group)
+        expect(role).to be_valid
+      end
+    end
+
+
+    context 'contactable_flags' do
+      include ActiveSupport::Testing::TimeHelpers
+
+      it 'resets contactable flags when creating new alumnus role' do
+        person = people(:flock_leader_bern)
+        person.update(contactable_by_federation: false,
+                      contactable_by_state: false,
+                      contactable_by_region: false,
+                      contactable_by_flock: false)
+
+        travel_to(Time.zone.now + Settings.role.minimum_days_to_archive.days + 1.day) do
+          person.roles.first.destroy
+        end
+        expect(person.reload).to be_contactable_by_federation
+        expect(person).to be_contactable_by_state
+        expect(person).to be_contactable_by_region
+        expect(person).to be_contactable_by_flock
+      end
+    end
+
+  end
+
 end

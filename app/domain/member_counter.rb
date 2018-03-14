@@ -21,7 +21,7 @@ class MemberCounter
                Group::Flock::Treasurer,
                Group::Flock::Guide,
                Group::ChildGroup::Leader],
-      child:  [Group::ChildGroup::Child] }
+      child:  [Group::ChildGroup::Child] }.freeze
 
   attr_reader :year, :flock
 
@@ -71,12 +71,16 @@ class MemberCounter
     @state ||= flock.state
   end
 
+  def region
+    @region ||= flock.region
+  end
+
   def members
     Person.joins(:roles).
-           where(roles: { group_id: flock.self_and_descendants,
-                          type: self.class.counted_roles.collect(&:sti_name),
-                          deleted_at: nil }).
-           uniq
+      where(roles: { group_id: flock.self_and_descendants,
+                     type: self.class.counted_roles.collect(&:sti_name),
+                     deleted_at: nil }).
+      uniq
   end
 
   private
@@ -89,6 +93,7 @@ class MemberCounter
     count = MemberCount.new
     count.flock = flock
     count.state = state
+    count.region = region
     count.year = year
     count.born_in = born_in
     count

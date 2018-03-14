@@ -1,6 +1,6 @@
 # encoding: utf-8
 
-#  Copyright (c) 2012-2013, Jungwacht Blauring Schweiz. This file is part of
+#  Copyright (c) 2012-2017, Jungwacht Blauring Schweiz. This file is part of
 #  hitobito_jubla and licensed under the Affero General Public License version 3
 #  or later. See the COPYING file at the top-level directory or at
 #  https://github.com/hitobito/hitobito_jubla.
@@ -275,11 +275,6 @@ describe PersonReadables do
             other = Fabricate(Group::StateWorkGroup::External.name.to_sym, group: group)
             is_expected.to include(other.person)
           end
-
-          it 'may get alumni in his group' do
-            other = Fabricate(Group::StateWorkGroup::Alumnus.name.to_sym, group: group)
-            is_expected.to include(other.person)
-          end
         end
 
         context 'group in same layer' do
@@ -312,6 +307,20 @@ describe PersonReadables do
 
       end
 
+      describe :alumnus_group_below_read do
+        let(:role) do
+          Fabricate(Group::FederalAlumnusGroup::Leader.name, group: groups(:ch_ehemalige))
+        end
+
+        let(:group) { groups(:bern_ehemalige) }
+
+
+        it 'may get alumni member' do
+          other = Fabricate(Group::FlockAlumnusGroup::Member.name, group: group)
+          is_expected.to include(other.person)
+        end
+      end
+
 
       describe 'no permissions' do
         let(:role) { Fabricate(Group::StateWorkGroup::External.name.to_sym, group: groups(:be_state_camp)) }
@@ -340,11 +349,6 @@ describe PersonReadables do
 
           it 'may not get external people in his group' do
             other = Fabricate(Group::StateWorkGroup::External.name.to_sym, group: group)
-            is_expected.not_to include(other.person)
-          end
-
-          it 'may not get alumni in his group' do
-            other = Fabricate(Group::StateWorkGroup::Alumnus.name.to_sym, group: group)
             is_expected.not_to include(other.person)
           end
         end
